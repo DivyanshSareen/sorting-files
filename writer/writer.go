@@ -7,8 +7,17 @@ import (
 	"os"
 )
 
-func WriteChunk(ch <-chan []int) {
-	err := os.MkdirAll("intermediate", 0755)
+// FileWriter writes sorted chunks to intermediate files.
+type FileWriter struct {
+	dir string
+}
+
+func NewFileWriter(dir string) *FileWriter {
+	return &FileWriter{dir: dir}
+}
+
+func (fw *FileWriter) Write(ch <-chan []int) {
+	err := os.MkdirAll(fw.dir, 0755)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -20,8 +29,7 @@ func WriteChunk(ch <-chan []int) {
 			}
 			fmt.Fprintf(buf, "%d", num)
 		}
-
-		fileName := randomFileName("intermediate/sorted", "txt")
+		fileName := fw.randomFileName()
 		err := os.WriteFile(fileName, buf.Bytes(), 0644)
 		if err != nil {
 			fmt.Println(err)
@@ -31,13 +39,12 @@ func WriteChunk(ch <-chan []int) {
 	}
 }
 
-func randomFileName(prefix, extention string) string {
+func (fw *FileWriter) randomFileName() string {
 	for {
-		name := fmt.Sprintf("%s-%d.%s", prefix, rand.Int63(), extention)
+		name := fmt.Sprintf("%s/sorted-%d.txt", fw.dir, rand.Int63())
 		if _, err := os.Stat(name); os.IsNotExist(err) {
 			return name
-		} else {
-			fmt.Println("Dupe file name, generating new file name")
 		}
+		fmt.Println("Dupe file name, generating new file name")
 	}
 }

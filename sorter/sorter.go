@@ -2,7 +2,14 @@ package sorter
 
 import "slices"
 
-func SortChunks(ch <-chan []int) <-chan []int {
+// SliceSorter sorts each chunk using the standard slice sort.
+type SliceSorter struct{}
+
+func NewSliceSorter() *SliceSorter {
+	return &SliceSorter{}
+}
+
+func (s *SliceSorter) Sort(ch <-chan []int) <-chan []int {
 	sortedChannel := make(chan []int, 1)
 	go func() {
 		defer close(sortedChannel)

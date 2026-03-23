@@ -7,39 +7,44 @@ import (
 	"os"
 )
 
-func GenerateChunks(file *os.File, chunkSize int) <-chan []int {
+// FixedSizeChunker splits a file into fixed-size integer chunks.
+type FixedSizeChunker struct {
+	chunkSize int
+}
+
+func NewFixedSizeChunker(chunkSize int) *FixedSizeChunker {
+	return &FixedSizeChunker{chunkSize: chunkSize}
+}
+
+func (c *FixedSizeChunker) GenerateChunks(file *os.File) <-chan []int {
 	ch := make(chan []int, 3)
-	go biteChunk(file, chunkSize, ch)
+	go c.biteChunk(file, ch)
 	return ch
 }
 
-func biteChunk(file *os.File, chunkSize int, ch chan<- []int) {
+func (c *FixedSizeChunker) biteChunk(file *os.File, ch chan<- []int) {
 	defer close(ch)
 	scanner := bufio.NewScanner(file)
 	scanner.Split(OnComma)
-	chunk := make([]int, 0, chunkSize)
+	chunk := make([]int, 0, c.chunkSize)
 	for scanner.Scan() {
 		if len(scanner.Bytes()) == 0 {
 			continue
 		}
-
-		// digit, err := strconv.Atoi(string(scanner.Bytes()))
 		digit, err := ByteToInt(scanner.Bytes())
 		if err != nil {
 			fmt.Println("Error converting string :(", err)
 			continue
 		}
 		chunk = append(chunk, digit)
-
-		if len(chunk) == chunkSize {
+		if len(chunk) == c.chunkSize {
 			ch <- chunk
-			chunk = make([]int, 0)
+			chunk = make([]int, 0, c.chunkSize)
 		}
 	}
 	if len(chunk) > 0 {
 		ch <- chunk
 	}
-
 }
 
 func ByteToInt(b []byte) (int, error) {
@@ -50,7 +55,6 @@ func ByteToInt(b []byte) (int, error) {
 	for _, c := range b {
 		n = n*10 + int(c-'0')
 	}
-
 	return n, nil
 }
 
@@ -62,7 +66,7 @@ func OnComma(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		return i + 1, cleanNumber(data[:i]), nil
 	}
 	if atEOF {
-		return (len(data)), cleanNumber(data), nil
+		return len(data), cleanNumber(data), nil
 	}
 	return 0, nil, nil
 }
