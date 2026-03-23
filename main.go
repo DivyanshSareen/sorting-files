@@ -17,9 +17,14 @@ func run(
 	w pipeline.Writer,
 	merger pipeline.Merger,
 ) error {
-	ch := chunker.GenerateChunks(file)
+	ch, errCh := chunker.GenerateChunks(file)
 	sorted := sorter.Sort(ch)
-	w.Write(sorted)
+	if err := w.Write(sorted); err != nil {
+		return fmt.Errorf("write stage: %w", err)
+	}
+	if err := <-errCh; err != nil {
+		return fmt.Errorf("chunk stage: %w", err)
+	}
 	return merger.Merge()
 }
 

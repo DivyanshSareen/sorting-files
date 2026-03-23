@@ -46,10 +46,14 @@ func (m *KWayMerger) Merge() error {
 	var scanners []*bufio.Scanner
 	var openFiles []*os.File
 
+	// track opens so we can close on early error
 	for _, file := range files {
 		path := fmt.Sprintf("%s/%s", m.intermediateDir, file.Name())
 		f, err := os.Open(path)
 		if err != nil {
+			for _, already := range openFiles {
+				already.Close()
+			}
 			return fmt.Errorf("opening %s: %w", path, err)
 		}
 		scanner := bufio.NewScanner(f)
@@ -72,7 +76,10 @@ func (m *KWayMerger) kWayMerge(scanners []*bufio.Scanner) error {
 	heap.Init(h)
 	for i, scanner := range scanners {
 		if scanner.Scan() {
-			num, _ := chunks.ByteToInt(scanner.Bytes())
+			num, err := chunks.ByteToInt(scanner.Bytes())
+			if err != nil {
+				return fmt.Errorf("parsing initial value from scanner %d: %w", i, err)
+			}
 			heap.Push(h, token{val: num, idx: i})
 		}
 	}
@@ -84,20 +91,30 @@ func (m *KWayMerger) kWayMerge(scanners []*bufio.Scanner) error {
 	defer f.Close()
 
 	w := bufio.NewWriterSize(f, 64*1024)
-	defer w.Flush()
 
 	isFirst := true
 	for h.Len() > 0 {
 		ele := heap.Pop(h).(token)
 		if !isFirst {
-			w.WriteByte(',')
+			if err := w.WriteByte(','); err != nil {
+				return fmt.Errorf("writing output: %w", err)
+			}
 		}
-		fmt.Fprintf(w, "%d", ele.val)
+		if _, err := fmt.Fprintf(w, "%d", ele.val); err != nil {
+			return fmt.Errorf("writing output: %w", err)
+		}
 		isFirst = false
 		if scanners[ele.idx].Scan() {
-			num, _ := chunks.ByteToInt(scanners[ele.idx].Bytes())
+			num, err := chunks.ByteToInt(scanners[ele.idx].Bytes())
+			if err != nil {
+				return fmt.Errorf("parsing value from scanner %d: %w", ele.idx, err)
+			}
 			heap.Push(h, token{val: num, idx: ele.idx})
 		}
+	}
+
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("flushing output: %w", err)
 	}
 	return nil
 }

@@ -16,10 +16,9 @@ func NewFileWriter(dir string) *FileWriter {
 	return &FileWriter{dir: dir}
 }
 
-func (fw *FileWriter) Write(ch <-chan []int) {
-	err := os.MkdirAll(fw.dir, 0755)
-	if err != nil {
-		fmt.Println(err)
+func (fw *FileWriter) Write(ch <-chan []int) error {
+	if err := os.MkdirAll(fw.dir, 0755); err != nil {
+		return fmt.Errorf("creating intermediate dir: %w", err)
 	}
 	for chunk := range ch {
 		buf := new(bytes.Buffer)
@@ -30,13 +29,12 @@ func (fw *FileWriter) Write(ch <-chan []int) {
 			fmt.Fprintf(buf, "%d", num)
 		}
 		fileName := fw.randomFileName()
-		err := os.WriteFile(fileName, buf.Bytes(), 0644)
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			fmt.Println("saved file", fileName)
+		if err := os.WriteFile(fileName, buf.Bytes(), 0644); err != nil {
+			return fmt.Errorf("writing chunk to %s: %w", fileName, err)
 		}
+		fmt.Println("saved file", fileName)
 	}
+	return nil
 }
 
 func (fw *FileWriter) randomFileName() string {

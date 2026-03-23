@@ -16,14 +16,16 @@ func NewFixedSizeChunker(chunkSize int) *FixedSizeChunker {
 	return &FixedSizeChunker{chunkSize: chunkSize}
 }
 
-func (c *FixedSizeChunker) GenerateChunks(file *os.File) <-chan []int {
+func (c *FixedSizeChunker) GenerateChunks(file *os.File) (<-chan []int, <-chan error) {
 	ch := make(chan []int, 3)
-	go c.biteChunk(file, ch)
-	return ch
+	errCh := make(chan error, 1)
+	go c.biteChunk(file, ch, errCh)
+	return ch, errCh
 }
 
-func (c *FixedSizeChunker) biteChunk(file *os.File, ch chan<- []int) {
+func (c *FixedSizeChunker) biteChunk(file *os.File, ch chan<- []int, errCh chan<- error) {
 	defer close(ch)
+	defer close(errCh)
 	scanner := bufio.NewScanner(file)
 	scanner.Split(OnComma)
 	chunk := make([]int, 0, c.chunkSize)
@@ -33,14 +35,18 @@ func (c *FixedSizeChunker) biteChunk(file *os.File, ch chan<- []int) {
 		}
 		digit, err := ByteToInt(scanner.Bytes())
 		if err != nil {
-			fmt.Println("Error converting string :(", err)
-			continue
+			errCh <- fmt.Errorf("parsing token: %w", err)
+			return
 		}
 		chunk = append(chunk, digit)
 		if len(chunk) == c.chunkSize {
 			ch <- chunk
 			chunk = make([]int, 0, c.chunkSize)
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		errCh <- fmt.Errorf("scanning file: %w", err)
+		return
 	}
 	if len(chunk) > 0 {
 		ch <- chunk
